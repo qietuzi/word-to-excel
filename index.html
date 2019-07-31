@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hello World!</title>
+  </head>
+  <body>
+    <h1>Hello World!</h1>
+    <!-- All of the Node.js APIs are available in this renderer process. -->
+    <button type="button" id="file">选择文件</button>
+    <button type="button" id="btn">解析文件</button>
+    <button type="button" id="export">导出excel</button>
+
+    <div id="files"></div>
+
+    <script>
+      let keys = [
+        '岗位名称',
+        '所属部门',
+        '岗位编号',
+        '工作地点',
+        '直接上级岗位',
+        '直接下级岗位',
+        '直接下属人数',
+        '间接下属人数',
+        '工作经验',
+        '专业资质证明',
+        '知识与技能',
+        '关键素质项',
+        '其他要求'
+      ]
+
+      let text
+      let excel
+      let filePaths
+      const fs = require('fs')
+      const mammoth = require('mammoth')
+      const excelPort = require('excel-export')
+      const { dialog } = require('electron').remote
+
+      const readWord = function(words, analysis) {
+        return new Promise(resolve => {
+          mammoth
+            .extractRawText({ path: words[analysis.length] })
+            .then(async function(result) {
+              let error = result.messages.toString()
+              if (error) {
+                analysis.push('error')
+              } else {
+                analysis.push(result.value)
+              }
+              if (analysis.length !== words.length) {
+                await readWord(words, analysis)
+                resolve(analysis)
+              } else {
+                resolve(analysis)
+              }
+            })
+        })
+      }
+
+      document.getElementById('file').addEventListener('click', function() {
+        try {
+          dialog.showOpenDialog(
+            {
+              properties: ['openFile', 'multiSelections']
+            },
+            function(files) {
+              filePaths = files
+              filePaths.map(item => {
+                let fileName = document.createElement('p')
+                let laseIndex = item.lastIndexOf('/') + 1
+                fileName.className = 'file'
+                fileName.innerText = item.substring(laseIndex)
+                document.getElementById('files').append(fileName)
+              })
+            }
+          )
+        } catch (e) {
+          dialog.showErrorBox('title', e.message)
+        }
+      })
+
+      document
+        .getElementById('btn')
+        .addEventListener('click', async function() {
+          try {
+            let files = document.querySelectorAll('.file')
+            let analysis = await readWord(filePaths, [])
+            analysis = analysis.map((item, index) => {
+              if (item === 'error') {
+                let icon = document.createElement('span')
+                icon.innerText = 'error'
+                icon.style.color = 'red'
+                files[index].append(icon)
+                return item
+              } else {
+                let newItem = new Array()
+                let temp = item.split('\n\n')
+                keys.forEach(item => {
+                  let index = temp.indexOf(item)
+                  if (index !== -1) {
+                    newItem.push(temp[index + 1])
+                  }
+                })
+                let icon = document.createElement('span')
+                icon.innerText = 'ok'
+                icon.style.color = 'green'
+                files[index].append(icon)
+                return newItem
+              }
+            })
+            let config = {
+              cols: keys.map(item => ({ caption: item })),
+              rows: analysis.filter(item => Array.isArray(item))
+            }
+            excel = excelPort.execute(config)
+          } catch (e) {
+            dialog.showErrorBox('title', e.message)
+          }
+        })
+
+      document.getElementById('export').addEventListener('click', function() {
+        dialog.showSaveDialog(
+          {
+            title: '导出到',
+            filters: [{ name: 'excel', extensions: ['xlsx'] }]
+          },
+          function(path) {
+            fs.writeFile(path, excel, 'binary', function(err) {
+              if (err) {
+                dialog.showErrorBox('title', e.message)
+              }
+            })
+          }
+        )
+      })
+    </script>
+
+    <script>
+      // You can also require other files to run in this process
+      //   require('./renderer.js')
+    </script>
+  </body>
+</html>
